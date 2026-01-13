@@ -32,22 +32,34 @@ The application will start on `http://localhost:8080`
 
 ## Jira Integration
 
-This repository includes automated Jira integration through GitHub Actions. When you create a pull request from a branch that contains a Jira issue ID, the workflow will automatically update the issue status.
+This repository includes automated Jira integration through GitHub Actions. When you create a pull request, the workflow will automatically extract the Jira issue ID and update the issue status.
 
 ### How It Works
 
-1. **Branch Naming**: Name your branches with the Jira issue ID (e.g., `PROJ-123-feature-name`, `ABC-456-bugfix`)
+1. **Issue ID Extraction**: The workflow searches for Jira issue IDs in the following order:
+   - First, checks the **branch name** (e.g., `PROJ-123-feature-name`, `ABC-456-bugfix`)
+   - If not found, checks the **PR title** (e.g., `[PROJ-123] Add new feature`)
+   - If not found, checks the **PR description** (e.g., `This PR addresses PROJ-123`)
 2. **Pull Request Opened**: When you open a PR, the workflow extracts the issue ID and updates the Jira status to "In Review"
 3. **Pull Request Merged**: When the PR is merged to `main`, the workflow updates the Jira status to "Done"
-4. **No Issue ID**: If no issue ID is found in the branch name, the workflow gracefully skips Jira updates
+4. **No Issue ID**: If no issue ID is found in any location, the workflow gracefully skips Jira updates
 
-### Supported Branch Patterns
+### Supported Issue ID Patterns
 
-The workflow automatically detects Jira issue IDs in the following formats:
+The workflow automatically detects Jira issue IDs matching the pattern `[A-Z]+-[0-9]+` from:
+
+**Branch names:**
 - `PROJ-123-feature-description`
 - `ABC-456/bugfix`
 - `feature/JIRA-789-implementation`
-- Any branch containing the pattern: `[A-Z]+-[0-9]+`
+
+**PR titles:**
+- `[PROJ-123] Add new feature`
+- `PROJ-123: Fix critical bug`
+- `Implement feature for TEAM-456`
+
+**PR descriptions:**
+- Any text containing issue IDs like `PROJ-123`, `ABC-456`, etc.
 
 ### Required GitHub Secrets
 
@@ -77,7 +89,7 @@ If these exact status names don't exist in your Jira workflow, you may need to c
 ### Error Handling
 
 The workflow is designed to fail gracefully:
-- If no issue ID is found in the branch name, it skips Jira updates
+- If no issue ID is found in branch name, PR title, or PR description, it skips Jira updates
 - If Jira credentials are not configured, it logs a message and continues
 - If Jira API calls fail, the workflow continues without failing the CI/CD pipeline
 - All Jira integration steps use `continue-on-error: true` to prevent blocking other workflows

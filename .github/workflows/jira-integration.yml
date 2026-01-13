@@ -1,7 +1,8 @@
 name: Jira Integration
-# This workflow extracts Jira issue IDs from branch names and updates issue status
-# based on PR lifecycle events. Each step is self-contained for clarity and
-# independent error handling.
+# This workflow extracts Jira issue IDs from branch names, PR titles, or PR descriptions
+# and updates issue status based on PR lifecycle events. Each step is self-contained for
+# clarity and independent error handling.
+# Extraction order: 1) Branch name, 2) PR title, 3) PR description
 
 on:
   pull_request:
@@ -15,23 +16,57 @@ jobs:
       pull-requests: read
 
     steps:
-      - name: Extract Issue ID from Branch Name
+      - name: Extract Issue ID from Branch Name, PR Title, or PR Description
         id: extract-issue
         run: |
           BRANCH_NAME="${{ github.head_ref }}"
-          echo "Branch name: $BRANCH_NAME"
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_DESCRIPTION="${{ github.event.pull_request.body }}"
+          ISSUE_ID=""
+          SOURCE=""
 
           # Try to extract issue ID (supports patterns like PROJ-123, ABC-456, etc.)
-          # Common patterns: PROJECT-123, JIRA-456
-          ISSUE_ID=$(echo "$BRANCH_NAME" | grep -oE '[A-Z]+-[0-9]+' | head -n 1 || echo "")
+          # Pattern: [A-Z]+-[0-9]+
 
+          # 1. Try branch name first
+          echo "Checking branch name: $BRANCH_NAME"
+          ISSUE_ID=$(echo "$BRANCH_NAME" | grep -oE '[A-Z]+-[0-9]+' | head -n 1 || echo "")
+          if [ -n "$ISSUE_ID" ]; then
+            SOURCE="branch name"
+            echo "✓ Issue ID found in branch name: $ISSUE_ID"
+          fi
+
+          # 2. If not found, try PR title
           if [ -z "$ISSUE_ID" ]; then
-            echo "No issue ID found in branch name. Skipping Jira integration."
+            echo "No issue ID in branch name, checking PR title: $PR_TITLE"
+            ISSUE_ID=$(echo "$PR_TITLE" | grep -oE '[A-Z]+-[0-9]+' | head -n 1 || echo "")
+            if [ -n "$ISSUE_ID" ]; then
+              SOURCE="PR title"
+              echo "✓ Issue ID found in PR title: $ISSUE_ID"
+            fi
+          fi
+
+          # 3. If still not found, try PR description
+          if [ -z "$ISSUE_ID" ]; then
+            echo "No issue ID in PR title, checking PR description"
+            ISSUE_ID=$(echo "$PR_DESCRIPTION" | grep -oE '[A-Z]+-[0-9]+' | head -n 1 || echo "")
+            if [ -n "$ISSUE_ID" ]; then
+              SOURCE="PR description"
+              echo "✓ Issue ID found in PR description: $ISSUE_ID"
+            fi
+          fi
+
+          # Final check
+          if [ -z "$ISSUE_ID" ]; then
+            echo "✗ No issue ID found in branch name, PR title, or PR description. Skipping Jira integration."
             echo "issue_found=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
+          echo "======================================"
           echo "Extracted Issue ID: $ISSUE_ID"
+          echo "Source: $SOURCE"
+          echo "======================================"
           echo "issue_id=$ISSUE_ID" >> $GITHUB_OUTPUT
           echo "issue_found=true" >> $GITHUB_OUTPUT
 
