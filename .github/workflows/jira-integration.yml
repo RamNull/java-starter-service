@@ -1,4 +1,7 @@
 name: Jira Integration
+# This workflow extracts Jira issue IDs from branch names and updates issue status
+# based on PR lifecycle events. Each step is self-contained for clarity and
+# independent error handling.
 
 on:
   pull_request:
@@ -32,8 +35,7 @@ jobs:
       - name: Update Jira Status to In Review
         if: |
           steps.extract-issue.outputs.issue_found == 'true' &&
-          github.event.action != 'closed' &&
-          github.event.pull_request.merged == false
+          github.event.action != 'closed'
         continue-on-error: true
         run: |
           ISSUE_ID="${{ steps.extract-issue.outputs.issue_id }}"
