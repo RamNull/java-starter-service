@@ -63,13 +63,53 @@ The workflow automatically detects Jira issue IDs matching the pattern `[A-Z]+-[
 
 ### Required GitHub Secrets
 
-To enable Jira integration, configure the following secrets in your repository settings (Settings → Secrets and variables → Actions):
+To enable Jira integration, configure the following secrets in your repository settings:
 
 | Secret Name | Description | Example |
 |------------|-------------|---------|
 | `JIRA_BASE_URL` | Your Jira instance URL (without trailing slash) | `https://your-domain.atlassian.net` |
 | `JIRA_EMAIL` | Email address of the Jira user | `your-email@example.com` |
 | `JIRA_API_TOKEN` | Jira API token for authentication | Generate at: https://id.atlassian.com/manage-profile/security/api-tokens |
+
+### How to Set Up GitHub Secrets
+
+Follow these steps to configure the required secrets:
+
+1. **Navigate to Repository Settings**
+   - Go to your repository on GitHub
+   - Click on **Settings** tab
+   - In the left sidebar, click **Secrets and variables** → **Actions**
+
+2. **Add New Secret**
+   - Click the **New repository secret** button
+   - Enter the secret name (e.g., `JIRA_BASE_URL`)
+   - Enter the secret value
+   - Click **Add secret**
+
+3. **Repeat for All Required Secrets**
+   - Add `JIRA_BASE_URL` - Your Jira instance URL (e.g., `https://your-company.atlassian.net`)
+   - Add `JIRA_EMAIL` - Your Jira account email
+   - Add `JIRA_API_TOKEN` - Your Jira API token (see below for generation)
+
+### Using Environment-Specific Secrets
+
+If you need different Jira configurations for different environments (e.g., staging vs. production):
+
+1. **Option 1: Use GitHub Environments**
+   - Go to **Settings** → **Environments**
+   - Create environments (e.g., `production`, `staging`)
+   - Add environment-specific secrets to each environment
+   - Modify the workflow to use a specific environment:
+   ```yaml
+   jobs:
+     update-jira-status:
+       runs-on: ubuntu-latest
+       environment: production  # Add this line
+   ```
+
+2. **Option 2: Use Different Secret Names**
+   - Create secrets with environment prefixes: `PROD_JIRA_BASE_URL`, `STAGING_JIRA_BASE_URL`
+   - Modify the workflow to use the appropriate secret based on your needs
 
 ### Generating a Jira API Token
 
