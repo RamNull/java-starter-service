@@ -66,7 +66,7 @@ jobs:
           fi
 
           echo "Available transitions:"
-          echo "$TRANSITIONS_BODY" | jq -r '.transitions[] | "\(.id): \(.name)"' || echo "$TRANSITIONS_BODY"
+          echo "$TRANSITIONS_BODY" | jq -r '.transitions[] | "\(.id): \(.name)"' || echo "Unable to parse transitions response"
 
           # Find "In Review" transition (case-insensitive search)
           TRANSITION_ID=$(echo "$TRANSITIONS_BODY" | jq -r '.transitions[] | select(.name | test("in review"; "i")) | .id' | head -n 1)
@@ -133,7 +133,7 @@ jobs:
           fi
 
           echo "Available transitions:"
-          echo "$TRANSITIONS_BODY" | jq -r '.transitions[] | "\(.id): \(.name)"' || echo "$TRANSITIONS_BODY"
+          echo "$TRANSITIONS_BODY" | jq -r '.transitions[] | "\(.id): \(.name)"' || echo "Unable to parse transitions response"
 
           # Find "Done" transition (case-insensitive search)
           TRANSITION_ID=$(echo "$TRANSITIONS_BODY" | jq -r '.transitions[] | select(.name | test("done"; "i")) | .id' | head -n 1)
