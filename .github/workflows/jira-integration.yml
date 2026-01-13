@@ -1,0 +1,163 @@
+name: Jira Integration
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+jobs:
+  update-jira-status:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Extract Issue ID from Branch Name
+        id: extract-issue
+        run: |
+          BRANCH_NAME="${{ github.head_ref }}"
+          echo "Branch name: $BRANCH_NAME"
+
+          # Try to extract issue ID (supports patterns like PROJ-123, ABC-456, etc.)
+          # Common patterns: PROJECT-123, JIRA-456
+          ISSUE_ID=$(echo "$BRANCH_NAME" | grep -oE '[A-Z]+-[0-9]+' | head -n 1 || echo "")
+
+          if [ -z "$ISSUE_ID" ]; then
+            echo "No issue ID found in branch name. Skipping Jira integration."
+            echo "issue_found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Extracted Issue ID: $ISSUE_ID"
+          echo "issue_id=$ISSUE_ID" >> $GITHUB_OUTPUT
+          echo "issue_found=true" >> $GITHUB_OUTPUT
+
+      - name: Update Jira Status to In Review
+        if: |
+          steps.extract-issue.outputs.issue_found == 'true' &&
+          github.event.action != 'closed' &&
+          github.event.pull_request.merged == false
+        continue-on-error: true
+        run: |
+          ISSUE_ID="${{ steps.extract-issue.outputs.issue_id }}"
+          JIRA_BASE_URL="${{ secrets.JIRA_BASE_URL }}"
+          JIRA_EMAIL="${{ secrets.JIRA_EMAIL }}"
+          JIRA_API_TOKEN="${{ secrets.JIRA_API_TOKEN }}"
+
+          if [ -z "$JIRA_BASE_URL" ] || [ -z "$JIRA_EMAIL" ] || [ -z "$JIRA_API_TOKEN" ]; then
+            echo "Jira credentials not configured. Skipping status update."
+            exit 0
+          fi
+
+          echo "Fetching available transitions for issue $ISSUE_ID..."
+
+          # Get available transitions
+          TRANSITIONS_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_ID/transitions")
+
+          HTTP_CODE=$(echo "$TRANSITIONS_RESPONSE" | tail -n 1)
+          TRANSITIONS_BODY=$(echo "$TRANSITIONS_RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Failed to fetch transitions. HTTP Status: $HTTP_CODE"
+            echo "Response: $TRANSITIONS_BODY"
+            exit 0
+          fi
+
+          echo "Available transitions:"
+          echo "$TRANSITIONS_BODY" | jq -r '.transitions[] | "\(.id): \(.name)"' || echo "$TRANSITIONS_BODY"
+
+          # Find "In Review" transition (case-insensitive search)
+          TRANSITION_ID=$(echo "$TRANSITIONS_BODY" | jq -r '.transitions[] | select(.name | test("in review"; "i")) | .id' | head -n 1)
+
+          if [ -z "$TRANSITION_ID" ]; then
+            echo "No 'In Review' transition found. Available transitions:"
+            echo "$TRANSITIONS_BODY" | jq -r '.transitions[] | .name' || echo "Unable to parse transitions"
+            exit 0
+          fi
+
+          echo "Transitioning issue $ISSUE_ID to 'In Review' (transition ID: $TRANSITION_ID)..."
+
+          # Update Jira issue status
+          UPDATE_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"transition\": {\"id\": \"$TRANSITION_ID\"}}" \
+            "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_ID/transitions")
+
+          UPDATE_HTTP_CODE=$(echo "$UPDATE_RESPONSE" | tail -n 1)
+          UPDATE_BODY=$(echo "$UPDATE_RESPONSE" | sed '$d')
+
+          if [ "$UPDATE_HTTP_CODE" -eq 204 ] || [ "$UPDATE_HTTP_CODE" -eq 200 ]; then
+            echo "✅ Successfully updated Jira issue $ISSUE_ID to 'In Review'"
+          else
+            echo "Failed to update Jira issue. HTTP Status: $UPDATE_HTTP_CODE"
+            echo "Response: $UPDATE_BODY"
+          fi
+
+      - name: Update Jira Status to Done
+        if: |
+          steps.extract-issue.outputs.issue_found == 'true' &&
+          github.event.action == 'closed' &&
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.base.ref == 'main'
+        continue-on-error: true
+        run: |
+          ISSUE_ID="${{ steps.extract-issue.outputs.issue_id }}"
+          JIRA_BASE_URL="${{ secrets.JIRA_BASE_URL }}"
+          JIRA_EMAIL="${{ secrets.JIRA_EMAIL }}"
+          JIRA_API_TOKEN="${{ secrets.JIRA_API_TOKEN }}"
+
+          if [ -z "$JIRA_BASE_URL" ] || [ -z "$JIRA_EMAIL" ] || [ -z "$JIRA_API_TOKEN" ]; then
+            echo "Jira credentials not configured. Skipping status update."
+            exit 0
+          fi
+
+          echo "Fetching available transitions for issue $ISSUE_ID..."
+
+          # Get available transitions
+          TRANSITIONS_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_ID/transitions")
+
+          HTTP_CODE=$(echo "$TRANSITIONS_RESPONSE" | tail -n 1)
+          TRANSITIONS_BODY=$(echo "$TRANSITIONS_RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Failed to fetch transitions. HTTP Status: $HTTP_CODE"
+            echo "Response: $TRANSITIONS_BODY"
+            exit 0
+          fi
+
+          echo "Available transitions:"
+          echo "$TRANSITIONS_BODY" | jq -r '.transitions[] | "\(.id): \(.name)"' || echo "$TRANSITIONS_BODY"
+
+          # Find "Done" transition (case-insensitive search)
+          TRANSITION_ID=$(echo "$TRANSITIONS_BODY" | jq -r '.transitions[] | select(.name | test("done"; "i")) | .id' | head -n 1)
+
+          if [ -z "$TRANSITION_ID" ]; then
+            echo "No 'Done' transition found. Available transitions:"
+            echo "$TRANSITIONS_BODY" | jq -r '.transitions[] | .name' || echo "Unable to parse transitions"
+            exit 0
+          fi
+
+          echo "Transitioning issue $ISSUE_ID to 'Done' (transition ID: $TRANSITION_ID)..."
+
+          # Update Jira issue status
+          UPDATE_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"transition\": {\"id\": \"$TRANSITION_ID\"}}" \
+            "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_ID/transitions")
+
+          UPDATE_HTTP_CODE=$(echo "$UPDATE_RESPONSE" | tail -n 1)
+          UPDATE_BODY=$(echo "$UPDATE_RESPONSE" | sed '$d')
+
+          if [ "$UPDATE_HTTP_CODE" -eq 204 ] || [ "$UPDATE_HTTP_CODE" -eq 200 ]; then
+            echo "✅ Successfully updated Jira issue $ISSUE_ID to 'Done'"
+          else
+            echo "Failed to update Jira issue. HTTP Status: $UPDATE_HTTP_CODE"
+            echo "Response: $UPDATE_BODY"
+          fi
