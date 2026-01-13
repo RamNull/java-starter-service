@@ -1,5 +1,6 @@
 package com.starter.model;
 
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -22,7 +23,7 @@ public class CartItem {
     private Integer quantity;
 
     @NotNull(message = "Price is required")
-    @Min(value = 0, message = "Price must be non-negative")
+    @DecimalMin(value = "0.0", message = "Price must be non-negative")
     private BigDecimal price;
 
     /**
