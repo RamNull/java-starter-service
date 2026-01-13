@@ -10,6 +10,9 @@ on:
 jobs:
   update-jira-status:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
 
     steps:
       - name: Extract Issue ID from Branch Name
